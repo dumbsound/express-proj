@@ -138,37 +138,41 @@ exports.delete = async (req, res) => {
 exports.studentData = async (req, res) => {
   try {
     let results = await Student.findAndCountAll({
-      where: {
-        classCode: req.params.classCode
-      },
+      // where: {
+      //   classCode: req.params.classCode
+      // },
       attributes: [
         "id",
         "studentName",
         "studentEmail",
       ]
     },
-      // {
-      //   offset: req.query.offset,
-      //   limit: req.query.limit,
-      // }
+      {
+        offset: req.query.offset,
+        limit: req.query.limit,
+      }
     )
 
-    let res = await axios.get('http://localhost:8080/students', {
-
+    let externalResults = await axios.get('http://localhost:8080/students', {
       params: {
-        classCode: req.query.class,
-        offset: req.query.limit,
+        class: req.query.class,
+        offset: req.query.offset,
         limit: req.query.limit
       }
     });
 
+    const externalCount = externalResults.data.count;
+    const externalStudents = externalResults.data.students;
+
     data = {};
-    data.count = results.count;
-    data.students = results.rows.map((student) => ({
+    data.count = results.count + externalCount;
+    const internalStudents = results.rows.map((student) => ({
       id: student.id,
       name: student.studentName,
       email: student.studentEmail
     }));
+
+    data.students = [...internalStudents, ...externalStudents];
 
     if (data.count === 0) {
       res.status(200).json({ message: "There is no entry" });
@@ -176,7 +180,7 @@ exports.studentData = async (req, res) => {
       res.status(200).json(data)
     }
   } catch (err) {
-    res.status(500).json({ message: "Error" })
+    res.status(500).json({ message: err })
   }
 };
 
@@ -201,7 +205,7 @@ exports.uploadFile = async (req, res) => {
   try {
     fs.createReadStream(req.file.path).pipe(csv({}))
       .on('data', async (data) => {
-        const [teacher, teacherCreated] = await Teacher.findOrCreate({
+        const teacher = await Teacher.findOrCreate({
           where: { teacherEmail: data.teacherEmail },
           defaults: {
             teacherName: data.teacherName,
@@ -209,45 +213,45 @@ exports.uploadFile = async (req, res) => {
           }
         })
 
-        if (!teacherCreated && teacher.teacherName != data.teacherName) {
+        if (teacher && teacher.teacherName != data.teacherName) {
           teacher.teacherName = data.teacherName;
           teacher.save();
         }
 
-        const [student, studentCreated] = await Student.findOrCreate({
+        const student = await Student.findOrCreate({
           where: { studentEmail: data.studentEmail },
           defaults: { studentName: data.studentName }
         })
 
-        if (!studentCreated && student.studentName != data.studentName) {
+        if (student && student.studentName != data.studentName) {
           student.studentName = data.studentName;
           student.save();
         }
 
-        const [subject, subjectCreated] = await Subject.findOrCreate({
+        const subject = await Subject.findOrCreate({
           where: { subjectCode: data.subjectCode },
           defaults: { subjectName: data.subjectName }
         })
 
-        if (!subjectCreated && subject.subjectName != data.subjectName) {
+        if (subject && subject.subjectName != data.subjectName) {
           subject.subjectName = data.subjectName;
           subject.save();
         }
 
-        const [class1, classCreated] = await Class.findOrCreate({
+        const class1 = await Class.findOrCreate({
           where: { classCode: data.classCode },
           defaults: { className: data.className }
         })
 
-        if (!classCreated && class1.className != data.className) {
+        if (class1 && class1.className != data.className) {
           class1.className = data.className;
           class1.save();
         }
 
-        // teacher.addSubject(subject);
-        // teacher.addClass(class1);
-        // student.addClass(class1);
-        
+        teacher.addSubject(subject);
+        teacher.addClass(class1);
+        student.addClass(class1);
+
       })
       .on('end', () => {
       });
@@ -309,8 +313,8 @@ exports.getReport = async (req, res) => {
       ],
     });
 
-    // let results = raw.map(r => r.toJSON())
-    // console.log(results)
+    let results = raw.map(r => r.toJSON())
+    console.log(results)
 
     const mapResults = results.map((result, index) => {
       return {
