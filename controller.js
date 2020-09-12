@@ -2,12 +2,13 @@ const express = require('express');
 const winston = require('winston');
 const multer = require('multer');
 const fs = require('fs');
+const axios = require('axios');
 const csv = require('csv-parser');
 const Teacher = require("./models/Teacher");
 const Subject = require("./models/Subject");
 const Student = require("./models/Student");
 const Class = require("./models/Class");
-const axios = require('axios');
+
 
 const logger = winston.createLogger({
   transports: [
@@ -39,8 +40,8 @@ exports.newEntry = async (req, res) => {
     // })
 
     let subjectOne = await Subject.create({
-      subjectName: "Python Basics",
-      subjectCode: "CS244"
+      subjectName: "Ayo",
+      subjectCode: "Sequelize"
     })
 
     results.addSubject(subjectOne);
@@ -205,7 +206,7 @@ exports.uploadFile = async (req, res) => {
   try {
     fs.createReadStream(req.file.path).pipe(csv({}))
       .on('data', async (data) => {
-        const teacher = await Teacher.findOrCreate({
+        const [teacher, teacherCreated] = await Teacher.findOrCreate({
           where: { teacherEmail: data.teacherEmail },
           defaults: {
             teacherName: data.teacherName,
@@ -213,39 +214,41 @@ exports.uploadFile = async (req, res) => {
           }
         })
 
-        if (teacher && teacher.teacherName != data.teacherName) {
+        if (!teacherCreated && teacher.teacherName != data.teacherName) {
           teacher.teacherName = data.teacherName;
           teacher.save();
         }
 
-        const student = await Student.findOrCreate({
+        const [student, studentCreated] = await Student.findOrCreate({
           where: { studentEmail: data.studentEmail },
           defaults: { studentName: data.studentName }
         })
 
-        if (student && student.studentName != data.studentName) {
+        if (!studentCreated && student.studentName != data.studentName) {
           student.studentName = data.studentName;
           student.save();
         }
 
-        const subject = await Subject.findOrCreate({
+        const [subject, subjectCreated] = await Subject.findOrCreate({
           where: { subjectCode: data.subjectCode },
           defaults: { subjectName: data.subjectName }
         })
 
-        if (subject && subject.subjectName != data.subjectName) {
+        if (!subjectCreated && subject.subjectName != data.subjectName) {
           subject.subjectName = data.subjectName;
           subject.save();
+
         }
 
-        const class1 = await Class.findOrCreate({
+        const [class1, classCreated] = await Class.findOrCreate({
           where: { classCode: data.classCode },
           defaults: { className: data.className }
         })
 
-        if (class1 && class1.className != data.className) {
+        if (!classCreated && class1.className != data.className) {
           class1.className = data.className;
           class1.save();
+
         }
 
         teacher.addSubject(subject);
@@ -314,7 +317,7 @@ exports.getReport = async (req, res) => {
     });
 
     let results = raw.map(r => r.toJSON())
-    console.log(results)
+    // console.log(results)
 
     const mapResults = results.map((result, index) => {
       return {
