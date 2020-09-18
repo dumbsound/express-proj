@@ -23,6 +23,12 @@ async function main() {
       as: "StudentClasses",
     });
 
+    SubjectModel.belongsToMany(ClassModel, { through: "Subject_Classes" });
+    ClassModel.belongsToMany(SubjectModel, {
+      through: "Subject_Classes",
+      as: "SubjectClasses",
+    });
+
     TeacherModel.belongsToMany(ClassModel, { through: "Teacher_Classes" });
     ClassModel.belongsToMany(TeacherModel, {
       through: "Teacher_Classes",

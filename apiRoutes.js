@@ -20,9 +20,11 @@ router.get('/upload/:id',posts.getId);
 
 router.post("/upload/new", posts.newEntry);
 
+router.post("/upload/newStudent", posts.addStudentToClass);
+
 router.delete("/upload/:id", posts.delete);
 
-router.get('/class/:classCode', posts.studentData);
+router.get('/class/:classCode/students', posts.studentsInClasses);
 
 router.post('/upload', upload.single('file'), posts.uploadFile);
 

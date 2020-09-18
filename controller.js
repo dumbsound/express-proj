@@ -7,8 +7,7 @@ const csv = require('csv-parser');
 const Teacher = require("./models/Teacher");
 const Subject = require("./models/Subject");
 const Student = require("./models/Student");
-const Class = require("./models/Class");
-
+const ClassModel = require('./models/Class');
 
 const logger = winston.createLogger({
   transports: [
@@ -24,30 +23,53 @@ const errorLogger = winston.createLogger({
   ]
 });
 
-exports.newEntry = async (req, res) => {
+exports.addStudentToClass = async (req, res) => {
   try {
-    let results = await Teacher.findOne({
+    let results = await Student.findOne({
       where: {
-        teacherEmail: "Tan.Jimmy@edu.com",
-        // teacherName: "Jimmy Tan",
-        // toDelete: '1'
+        studentEmail: "apple.h@ntu.com",
       }
     })
-    // let classOne = await Class.create({
-    //   className: "German",
-    //   classCode: "G12"
-
-    // })
-
-    let subjectOne = await Subject.create({
-      subjectName: "Ayo",
-      subjectCode: "Sequelize"
+    let class1 = await ClassModel.findOne({
+      where: {
+        classCode: "SC1"
+      }
     })
 
-    results.addSubject(subjectOne);
-    // results.addClass(classOne);
+    results.addClass(class1);
 
     if (results != 0) {
+      res.status(200).json({ message: "Successfully Updated" });
+      logger.log({
+        level: 'info',
+        message: 'Updated id'
+      });
+    } else {
+      res.status(200).json({ message: "Not added" })
+    }
+  }
+  catch (err) {
+    res.status(500).json({ message: err });
+  }
+};
+
+exports.newEntry = async (req, res) => {
+  try {
+    let subject1 = await Subject.findOne({
+      where: {
+        subjectCode: "LIT12"
+      }
+    })
+
+    let class1 = await ClassModel.findOne({
+      where: {
+        classCode: "H908"
+      }
+    })
+
+    subject1.addClass(class1);
+
+    if (subject1 != 0) {
       res.status(200).json({ message: "Successfully Updated" });
       logger.log({
         level: 'info',
@@ -136,60 +158,56 @@ exports.delete = async (req, res) => {
   }
 };
 
-exports.studentData = async (req, res) => {
-  try {
-    let results = await Student.findAndCountAll({
-      // where: {
-      //   classCode: req.params.classCode
-      // },
+exports.studentsInClasses = async (req, res) => {
+  let answers = await ClassModel.findAndCountAll({
+    where: {
+      classCode: req.params.classCode
+    },
+    include: [{
+      model: Student,
+      as: 'StudentClasses',
       attributes: [
         "id",
         "studentName",
         "studentEmail",
       ]
-    },
-      {
-        offset: req.query.offset,
-        limit: req.query.limit,
-      }
-    )
+    }]
+  })
 
-    let externalResults = await axios.get('http://localhost:8080/students', {
-      params: {
-        class: req.query.class,
-        offset: req.query.offset,
-        limit: req.query.limit
-      }
-    });
+  const internalStudents = answers.rows[0].StudentClasses.map((student) => ({
+    id: student.id,
+    name: student.studentName,
+    email: student.studentEmail
+  }));
 
-    const externalCount = externalResults.data.count;
-    const externalStudents = externalResults.data.students;
-
-    data = {};
-    data.count = results.count + externalCount;
-    const internalStudents = results.rows.map((student) => ({
-      id: student.id,
-      name: student.studentName,
-      email: student.studentEmail
-    }));
-
-    data.students = [...internalStudents, ...externalStudents];
-
-    if (data.count === 0) {
-      res.status(200).json({ message: "There is no entry" });
-    } else {
-      res.status(200).json(data)
+  const externalResults = await axios.get('http://localhost:8080/students', {
+    params: {
+      class: req.query.class,
+      offset: req.query.offset,
+      limit: req.query.limit
     }
-  } catch (err) {
-    res.status(500).json({ message: err })
+  });
+
+  const externalCount = externalResults.data.count;
+  const externalStudents = externalResults.data.students;
+
+  const data = {};
+  data.count = answers.count + externalCount;
+  data.students = [...internalStudents, ...externalStudents];
+
+
+  if (answers.count === 0) {
+    res.status(200).json({ message: "There is no entry" });
+  } else {
+    res.status(200).json(data);
   }
-};
+}
 
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === 'text/csv')
     cb(null, true);
   else {
-    cb(new Error('message not in correct format'), false);
+    cb(new Error('File not in correct format'), false);
   }
 }
 
@@ -301,6 +319,8 @@ exports.updateClassName = async (req, res) => {
   }
 };
 
+exports.updateClassName = this.updateClassName;
+
 exports.getReport = async (req, res) => {
   try {
     let raw = await Teacher.findAll({
@@ -310,22 +330,29 @@ exports.getReport = async (req, res) => {
       include: [
         {
           'model': Subject,
-        }, {
-          'model': Class,
-        }
+          attributes: [
+            'SubjectCode',
+            'SubjectName'
+          ],
+          include: [{
+            model: ClassModel,
+            include: [],
+            required: false
+          }]
+        },
       ],
     });
 
-    let results = raw.map(r => r.toJSON())
-    // console.log(results)
+    const results = raw.map(r => r.toJSON());
 
-    const mapResults = results.map((result, index) => {
+    const mapResults = results.map((result) => {
       return {
         [result.teacherName]: result.Subjects.map((subject) => {
+          const classLength = Object.keys(subject.Classes).length;
           return {
-            subjectCode: subject.subjectCode,
-            subjectName: subject.subjectName,
-            numberOfClasses: result.Classes.length
+            subjectCode: subject.SubjectCode,
+            subjectName: subject.SubjectName,
+            numberOfClasses: classLength
           }
         })
       }
@@ -334,6 +361,6 @@ exports.getReport = async (req, res) => {
     res.status(200).json(mapResults);
 
   } catch (err) {
-    res.status(500).json({ message: "Error" })
+    res.status(500).json({ message: err })
   }
 };
